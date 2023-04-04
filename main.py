@@ -1,11 +1,22 @@
 import RPi.GPIO as GPIO
 import time
+import random
+from paho.mqtt import client as mqtt_client
 
 # Set which GPIO pins will handle each input
 START_LED = 38
 LOCK_LED  = 36
 SPIN_LED  = 32
 DONE_LED  = 26
+
+# Setup MQTT
+broker = 'broker.emqx.io'
+port = 1883
+topic = "WashingMachine/"
+# generate client ID with pub prefix randomly
+client_id = f'python-mqtt-{random.randint(0, 1000)}'
+
+# mosquitto_sub -h broker.emqx.io -p 1883 -t "WashingMachine/"
 
 # Configure GPIO
 GPIO.setmode(GPIO.BOARD)
@@ -14,13 +25,41 @@ GPIO.setup(LOCK_LED, GPIO.IN)
 GPIO.setup(SPIN_LED, GPIO.IN) 
 GPIO.setup(DONE_LED, GPIO.IN)
 
-# Monitor the status of voltage
-while True:
-  if GPIO.input(DONE_LED):
-    print("ON")
-  else:
-    print("OFF")
-  time.sleep(0.1)
+def connect_mqtt():
+    def on_connect(client, userdata, flags, rc):
+        if rc == 0:
+            print("Connected to MQTT Broker!")
+        else:
+            print("Failed to connect, return code %d\n", rc)
 
-# Cleanup once program terminates
-GPIO.cleanup()
+    client = mqtt_client.Client(client_id)
+    client.on_connect = on_connect
+    client.connect(broker, port)
+    return client
+
+
+def publish(client):
+    while True:
+        time.sleep(1)
+        if GPIO.input(DONE_LED):
+          msg = "ON"
+        else:
+          msg = "OFF"
+
+        result = client.publish(topic, msg)
+        # result: [0, 1]
+        status = result[0]
+        if status == 0:
+            print(f"Send `{msg}` to topic `{topic}`")
+        else:
+            print(f"Failed to send message to topic {topic}")
+
+
+def run():
+    client = connect_mqtt()
+    client.loop_start()
+    publish(client)
+
+
+if __name__ == '__main__':
+    run()
