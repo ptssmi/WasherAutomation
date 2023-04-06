@@ -4,28 +4,29 @@ import random
 from paho.mqtt import client as mqtt_client
 import credentials
 
-# Set which GPIO pins will handle each input
-START_LED = 38
-LOCK_LED  = 36
-SPIN_LED  = 32
-DONE_LED  = 26
+# Configure GPIO
+GpioArray = [26,36,32,38,40,37]
+GPIO.setmode(GPIO.BOARD)
+GPIO.setup(GpioArray, GPIO.IN)
 
 # Setup MQTT
-broker = 'homeassistant.local'
-port = 1883
-roottopic = "WashingMachine/"
-statetopic = "PowerState/0"
+broker           = 'homeassistant.local'
+port             = 1883
+roottopic        = "WashingMachine/"
 availablitytopic = "Available"
+StatusTopicArray = ["Sense","Wash","Rinse","Spin","Done","Lock"]
+
 # generate client ID with pub prefix randomly
 client_id = f'python-mqtt-{random.randint(0, 1000)}'
 
-# Configure GPIO
-GPIO.setmode(GPIO.BOARD)
-GPIO.setup(START_LED, GPIO.IN)
-GPIO.setup(LOCK_LED, GPIO.IN) 
-GPIO.setup(SPIN_LED, GPIO.IN) 
-GPIO.setup(DONE_LED, GPIO.IN)
+# Fetch the state of the GPIO pin
+def fetch_gpio(LED):
+    if GPIO.input(LED):
+        return "ON"
+    else:
+        return "OFF"
 
+# Connect to MQTT on homeassistant.local broker
 def connect_mqtt():
     def on_connect(client, userdata, flags, rc):
         if rc == 0:
@@ -34,7 +35,6 @@ def connect_mqtt():
         else:
             print("Failed to connect, return code %d\n", rc)
             client.publish(roottopic + availablitytopic,"Offline")
-
     client = mqtt_client.Client(client_id)
     client.on_connect = on_connect
     client.will_set(roottopic + availablitytopic, payload="Offline", qos=0, retain=True)
@@ -42,30 +42,31 @@ def connect_mqtt():
     client.connect(broker, port)
     return client
 
-
+# Publish the GPIO states to MQTT
 def publish(client):
     while True:
+        # Loop through all GPIO and report state
+        for i in range(len(StatusTopicArray)):
+            msg = fetch_gpio(GpioArray[i])
+            print(roottopic + StatusTopicArray[i])
+            result = client.publish(roottopic + StatusTopicArray[i], msg)
+            # Check if message was sent properly
+            status = result[0]
+            if status == 0:
+                print(f"Send `{msg}` to topic `{roottopic + StatusTopicArray[i]}`")
+            else:
+                print(f"Failed to send message to topic {roottopic}")
+        # Delay update by 1 second
         time.sleep(1)
-        if GPIO.input(DONE_LED):
-          msg = "ON"
-        else:
-          msg = "OFF"
 
-        result = client.publish(roottopic + statetopic, msg)
-        # result: [0, 1]
-        status = result[0]
-        if status == 0:
-            print(f"Send `{msg}` to topic `{roottopic}`")
-        else:
-            print(f"Failed to send message to topic {roottopic}")
-
-
+# Run script
 def run():
     client = connect_mqtt()
     client.loop_start()
     publish(client)
 
-
+# Main function
 if __name__ == '__main__':
-    # time.sleep(300)
+    # Add delay to allow Raspberry PI to boot
+    time.sleep(300)
     run()
