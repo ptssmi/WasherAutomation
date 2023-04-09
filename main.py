@@ -48,14 +48,9 @@ def publish(client):
         # Loop through all GPIO and report state
         for i in range(len(StatusTopicArray)):
             msg = fetch_gpio(GpioArray[i])
-            print(roottopic + StatusTopicArray[i])
             result = client.publish(roottopic + StatusTopicArray[i], msg)
             # Check if message was sent properly
             status = result[0]
-            if status == 0:
-                print(f"Send `{msg}` to topic `{roottopic + StatusTopicArray[i]}`")
-            else:
-                print(f"Failed to send message to topic {roottopic}")
         # Delay update by 1 second
         time.sleep(1)
 
